@@ -23,7 +23,7 @@ def binary_func_sep(logits, label,  UUID, loss_type, logit_scale, margin=0.0,
         logits = nn.Sigmoid()(logits * logit_scale)
         ce_loss = nn.BCELoss().cuda()
     elif loss_type == 'ce':
-        assert logits.size(1) >=2, f'Cannot apply CE loss with 2nd dim of {logits.size(1)}'
+        assert logits.size(1) >=2, f'Cannot apply CE loss with 2nd dim of {logits.size(1)} - shape: {logits.shape}'
         label = label.to(torch.long)
         ce_loss = nn.CrossEntropyLoss().cuda()
     else:
@@ -181,6 +181,7 @@ def train(model, epoch, train_loader, optimizer, config, minimizer, **kwargs):
     
 def validate(model, epoch, test_loader, config, **kwargs):
     logger = kwargs.get('logger')
+    report_on_wfas = kwargs.get('report_on_wfas')
 
     model.eval()
     with torch.no_grad():
@@ -188,10 +189,24 @@ def validate(model, epoch, test_loader, config, **kwargs):
         scores_list = []
         for i, sample_batched in enumerate(test_loader):
             image_x, live_label, UUID = sample_batched["image_x_v1"].cuda(), sample_batched["label"].cuda(), sample_batched["UUID"].cuda()
+            video_paths = sample_batched["video_path"]
             logits = model(image_x)
             logit = logits if config.MODEL.num_classes==1 else F.softmax(logits, dim=1)[:, 1]
             for i in range(len(logit)):
-                scores_list.append("{} {}\n".format(logit.squeeze()[i].item(), live_label[i].item()))
+                if report_on_wfas:
+                    scores_list.append("{} {}\n".format(video_paths[i], logit.squeeze()[i].item()))
+                else:
+                    try:
+                        logit_num = logit.squeeze()
+                        label = live_label
+                        if logit_num.shape != torch.Size([]):
+                            logit_num = logit_num[i]
+                            label = label[i]
+                        logit_num = logit_num.item()
+                        label = label.item()
+                        scores_list.append("{} {}\n".format(logit_num, label))
+                    except IndexError:
+                        raise IndexError(f'{logit.shape=}, {live_label.shape=}, {i=}, {logit=}, {live_label=}')
 
 
     map_score_val_filename = os.path.join(config.PATH.score_path, "epoch_{}_{}_score.txt".format(epoch,  config.test_set[0]))

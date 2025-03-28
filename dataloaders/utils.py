@@ -1,5 +1,8 @@
 import os
 from .dataset import (FaceDataset, RandomCutout, Identity,  RoundRobinDataset)
+from .wfas_dataset import WFASDataset
+from .rose_dataset import RoseDataset
+from .siw_dataset import SiWDataset
 from torch.utils.data import  DataLoader
 import torchvision.transforms as transforms
 import torch 
@@ -30,6 +33,23 @@ def get_single_dataset(data_dir,
         elif data_name in ["MSU_MFSD"]:
             data_set = FaceDataset(data_name, os.path.join(data_dir, 'msu'), is_train=True, label=label,
                                       transform=transform,  UUID=UUID,img_size=img_size )
+        elif data_name in ["ROSE_Youtu"]:
+            data_set = RoseDataset(
+                    data_name,
+                    "/datasets1/rgpa18/datasets/rose_youtu_processed/",
+                    is_train=True, label=label, transform=transform, UUID=UUID,
+                    img_size=img_size)
+        elif data_name in ["SiW"]:
+            data_set = SiWDataset(
+                    data_name,
+                    "/datasets1/rgpa18/datasets/siw/",
+                    is_train=True, label=label, transform=transform, UUID=UUID,
+                    img_size=img_size)
+        elif data_name in ["WFAS"]:
+            data_set = WFASDataset("/home/rgpa18/original_datasets/wfas",
+                                   transform=transform, is_train=True,
+                                   map_size=map_size, UUID=UUID,
+                                   img_size=img_size)
 
     else:
         if data_name in ["OULU"]:
@@ -45,11 +65,23 @@ def get_single_dataset(data_dir,
                                       transform=transform, map_size=map_size, UUID=UUID,img_size=img_size, 
                                        test_per_video=test_per_video)
         elif data_name in ["MSU_MFSD"]:
-            
             data_set = FaceDataset(data_name, os.path.join(data_dir, 'msu'), is_train=False, label=label,
                                       transform=transform, map_size=map_size, UUID=UUID, img_size=img_size, 
                                        test_per_video=test_per_video)
-
+        elif data_name in ["ROSE_Youtu"]:
+            data_set = RoseDataset(
+                    data_name,
+                    "/datasets1/rgpa18/datasets/rose_youtu_processed/",
+                    is_train=False, label=label, transform=transform,
+                    map_size=map_size, UUID=UUID, img_size=img_size,
+                    test_per_video=test_per_video)
+        elif data_name in ["SiW"]:
+            data_set = SiWDataset(
+                    data_name,
+                    "/datasets1/rgpa18/datasets/siw/",
+                    is_train=False, label=label, transform=transform,
+                    map_size=map_size, UUID=UUID, img_size=img_size,
+                    test_per_video=test_per_video)
     return data_set
 
 def get_datasets(data_dir, 
@@ -60,10 +92,19 @@ def get_datasets(data_dir,
                  map_size=32, 
                  transform=None, 
                  test_per_video=1,
-                 balance=False):
-
-
+                 balance=False,
+                 test_on_wfas=False):
     sum_n = 0
+    if test_on_wfas:
+        wfas = WFASDataset(
+                "/home/rgpa18/original_datasets/wfas",
+                transform=transform,
+                is_train=False,
+                map_size=map_size,
+                UUID=0,
+                img_size=img_size)
+        print(f"WFAS samples: {len(wfas)}")
+        return wfas
     if train:
         if not balance:
             data_name_list_train = data_list
@@ -99,7 +140,7 @@ def get_datasets(data_dir,
                     data_set_list.append(data_tmp)
                     sum_n += len(data_tmp)
              data_set_sum = RoundRobinDataset(data_set_list)
-    else:
+    else: # is test
         data_name_list_test = data_list
         data_set_sum = {}
         for i in range(len(data_name_list_test)):
@@ -133,6 +174,7 @@ def get_train_test_loader(config):
                                          interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(degrees=(-180, 180), interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2) if config.TRAIN.color_jitter else Identity(),
             transforms.ToTensor(),
             RandomCutout(1, 0.5) if config.TRAIN.cutout else Identity(),
             normalization
@@ -152,7 +194,8 @@ def get_train_test_loader(config):
                             train=False, data_list=config.test_set, 
                             img_size= config.MODEL.image_size, map_size=32, 
                             transform=test_transform,
-                            test_per_video=config.TEST.get('n_frames') if config.TEST.get('n_frames') else 1)
+                            test_per_video=config.TEST.get('n_frames') if config.TEST.get('n_frames') else 1,
+                            test_on_wfas=config.TEST.test_on_wfas)
     
     
     def seed_worker(worker_id):
@@ -167,8 +210,11 @@ def get_train_test_loader(config):
                               shuffle=True, num_workers=config.SYS.num_workers,
                             worker_init_fn=seed_worker,  generator=g)
 
-    test_loader = DataLoader(test_set[config.test_set[0]], batch_size=config.TRAIN.batch_size, 
-                             shuffle=False, num_workers=config.SYS.num_workers,
-                            worker_init_fn=seed_worker, generator=g)
+    if config.TEST.test_on_wfas:
+        test_loader = DataLoader(test_set, batch_size=config.TRAIN.batch_size, shuffle=False, num_workers=config.SYS.num_workers,worker_init_fn=seed_worker, generator=g)
+    else:
+        test_loader = DataLoader(test_set[config.test_set[0]], batch_size=config.TRAIN.batch_size, 
+                                 shuffle=False, num_workers=config.SYS.num_workers,
+                                worker_init_fn=seed_worker, generator=g)
 
     return train_loader,test_loader

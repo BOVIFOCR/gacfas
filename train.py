@@ -35,10 +35,12 @@ def main(config):
 
     now = datetime.now()
     key_names = ['loss_func', 'lr','fc_lr_scale', 'weight_decay', 'epochs', 'logit_scale',  'lambda_constrast' ]
+    print(config.TRAIN.minimizer)
     config.running_name = config.running_name +\
         '_'.join([f"{key}({value})" for key, value in config.TRAIN.items() if key in key_names]) +\
         f"_rho({config.TRAIN.get(config.TRAIN.minimizer.upper()).get('rho')})"+\
         f"_alpha({config.TRAIN.get(config.TRAIN.minimizer.upper()).get('alpha')})" +\
+        f"_seed({config.seed})" +\
         now.strftime('[%b %d %H.%M]')
     
     config.PATH.result_name = os.path.join(
@@ -91,6 +93,19 @@ def main(config):
         'auc': FixedLengthQueue(10),
         'tpr': FixedLengthQueue(10)
     })
+    if config.PRETRAINED.skip_training:
+        model.load_state_dict(torch.load(config.PRETRAINED.weights_path)['state_dict'])
+        cur_eval = validate(model, 1, test_loader, config, logger=logger, report_on_wfas=config.TEST.test_on_wfas)
+        accum_eval.HTER.enqueue(cur_eval['HTER'])
+        accum_eval.auc.enqueue(cur_eval['auc'])
+        accum_eval.tpr.enqueue(cur_eval['tpr'])
+        logger.log("[Avg. result]\t:  HTER={:.4f}+-{:.4f}, AUC={:.4f}+-{:.4f}, TPR={:.4f}+-{:.4f}".format(
+            accum_eval.HTER.avg(), accum_eval.HTER.std(), 
+            accum_eval.auc.avg(),  accum_eval.auc.std(), 
+            accum_eval.tpr.avg(), accum_eval.tpr.std()))
+        save_model(best_eval, cur_eval, model, 1, optimizer, scheduler, config, logger=logger)
+        logger.close()
+        return True
     for epoch in range(config.TRAIN.epochs):
         if epoch == config.TRAIN.warming_epochs: # Finish warming up
             set_trainable(model, True, [], [0])
@@ -121,5 +136,5 @@ if __name__ == '__main__':
     with open(args.config, 'r') as cf:
         config = yaml.safe_load(cf)
     config = easydict.EasyDict(config)
-    _seed_everything(1223)
+    _seed_everything(config.seed)
     main(config)

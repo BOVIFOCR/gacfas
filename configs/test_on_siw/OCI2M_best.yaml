@@ -1,14 +1,14 @@
-protocol: "OCM2I"
-train_set: ["OULU", "CASIA_MFSD", "MSU_MFSD"]
-test_set: ["Replay_attack"]
+protocol: "OCI2M"
+train_set: ["OULU", "CASIA_MFSD", "Replay_attack"]
+test_set: ["SiW"]
 
 running_name: ""
 
-seed: 85593
+seed: 21485
 
 PRETRAINED:
     skip_training: True
-    weights_path: "./paper_weights/resnet18_pOCM2I_best.pth"
+    weights_path: "./weights/best/oci2m.pth"
 
 PATH:
     data_folder: "./datasets/"
@@ -30,27 +30,32 @@ TRAIN:
     batch_size: 96
     lr: 0.005
     fc_lr_scale: 10
-    weight_decay: 0.0001
+    weight_decay: 0.02
     momentum: 0.9
     lr_step_size: 40
     lr_gamma: 0.5
     optimizer: "SGD"
     scheduler: "step"
     warming_epochs: 1
-    epochs: 50
-    logit_scale: 12
+    epochs: 20
+
+    balance_loader: True
+    iter_per_epoch: 10
+
     rotate: True
     color_jitter: False
     cutout: True
     loss_func: "bce"
+    logit_scale: 12
     feat_loss: "supcon"
-    lambda_constrast: 0.1
+    lambda_constrast: 0.2
 
-    minimizer: "gac"  # "gac-fas"
-    minimizer_warming: 10
+    minimizer: "gac" # "gac-fas"
+    minimizer_warming: 2
 
     GAC:
         rho: 0.1
         alpha: 0.0002
 TEST:
-    eval_preq: 1
+    eval_preq: 5
+    test_on_wfas: False

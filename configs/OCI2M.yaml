@@ -4,13 +4,19 @@ test_set: ["MSU_MFSD"]
 
 running_name: ""
 
+seed: 85593
+
+PRETRAINED:
+    skip_training: True
+    weights_path: "./paper_weights/resnet18_pOCI2M_best.pth"
+
 PATH:
     data_folder: "./datasets/"
     output_folder: "./logs/"
 
 SYS:
     num_gpus: 1
-    GPUs: "0"
+    GPUs: "1"
     num_workers: 4
 MODEL:
     model_name: "resnet18"
@@ -37,13 +43,14 @@ TRAIN:
     iter_per_epoch: 10
 
     rotate: True
+    color_jitter: False
     cutout: True
     loss_func: "bce"
     logit_scale: 12
     feat_loss: "supcon"
     lambda_constrast: 0.2
 
-    minimizer: "gac-fas"
+    minimizer: "gac" # "gac-fas"
     minimizer_warming: 2
 
     GAC:

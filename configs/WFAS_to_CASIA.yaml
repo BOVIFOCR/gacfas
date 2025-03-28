@@ -1,6 +1,6 @@
-protocol: "OCM2I"
-train_set: ["OULU", "CASIA_MFSD", "MSU_MFSD"]
-test_set: ["Replay_attack"]
+protocol: "OMI2C"
+train_set: ["WFAS"]
+test_set: ["CASIA_MFSD"]
 
 running_name: ""
 
@@ -8,7 +8,7 @@ seed: 85593
 
 PRETRAINED:
     skip_training: True
-    weights_path: "./paper_weights/resnet18_pOCM2I_best.pth"
+    weights_path: "./weights/last_epoch/trained_on_wfas.pth"
 
 PATH:
     data_folder: "./datasets/"
@@ -23,34 +23,39 @@ MODEL:
     norm: True
     usebias: False
     image_size: 256
-    num_classes: 1
+    num_classes: 2
 
 TRAIN:
     pretrained: "imagenet"
     batch_size: 96
-    lr: 0.005
+    lr: 0.01
     fc_lr_scale: 10
-    weight_decay: 0.0001
+    weight_decay: 0.0006
     momentum: 0.9
     lr_step_size: 40
     lr_gamma: 0.5
     optimizer: "SGD"
     scheduler: "step"
     warming_epochs: 1
-    epochs: 50
-    logit_scale: 12
+    epochs: 80
+
+    balance_loader: False
+    iter_per_epoch: 10
+
     rotate: True
-    color_jitter: False
+    color_jitter: True
     cutout: True
-    loss_func: "bce"
+    loss_func: "ce"
+    logit_scale: 32
     feat_loss: "supcon"
-    lambda_constrast: 0.1
+    lambda_constrast: 0.2
 
     minimizer: "gac"  # "gac-fas"
-    minimizer_warming: 10
+    minimizer_warming: 2
 
     GAC:
         rho: 0.1
         alpha: 0.0002
 TEST:
     eval_preq: 1
+    test_on_wfas: True

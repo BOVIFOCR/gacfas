@@ -9,7 +9,6 @@ model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
     }
 from copy import deepcopy
-from .mixstyle import InstrClassMixStyle
 
 class NormedLogisticRegression(nn.Module):
     def __init__(self, in_dim:int, out_dim:int=1, ):

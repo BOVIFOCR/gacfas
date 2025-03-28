@@ -14,15 +14,6 @@ import pathlib
 
 USE_CENTER_FRAME_FOR_TESTING = False
 
-def list_dirs_at_depth_ospath(root_dir, depth):
-    if depth < 0:
-        return []
-    elif depth == 0:
-        return [root_dir]
-    else:
-        sub_dirs = [os.path.join(root_dir, d) for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
-        return [d for sub_dir in sub_dirs for d in list_dirs_at_depth(sub_dir, depth-1)] 
-    
 def list_dirs_at_depth(p, depth):
     p = pathlib.Path(p)
     if depth < 0:
@@ -36,7 +27,7 @@ def list_dirs_at_depth(p, depth):
                 ans += list_dirs_at_depth(q, depth-1)
         return ans
     
-class FaceDataset(Dataset):    
+class RoseDataset(Dataset):    
     def __init__(self, 
                  dataset_name, 
                  root_dir, 
@@ -48,13 +39,27 @@ class FaceDataset(Dataset):
                  img_size=256,
                  test_per_video=1):
         self.is_train = is_train
-        dir_depth = 1  # previously 2
-        path_prefix = pathlib.Path(root_dir) / ['test', 'train'][is_train]
-        self.video_list = [p for p in list_dirs_at_depth(path_prefix, dir_depth) if len(list(p.iterdir())) > 0]
+        self.video_list = list(filter(lambda x: x.is_dir(), pathlib.Path(root_dir).iterdir()))
+
         if label is not None and label != 'all':
-            self.video_list = list(filter(lambda x: label in x.name, self.video_list))
-        # print(f"({root_dir.split('/')[-1]}) Total video: {len(self.video_list)}: {len([u for u in self.video_list  if 'live' in u])} vs. {len([u for u in self.video_list  if 'live' not in u])}" )
-        print(f"({root_dir.split('/')[-1]}) Total video: {len(self.video_list)}: {len([u for u in self.video_list  if 'live' in u.name])} vs. {len([u for u in self.video_list  if 'live' not in u.name])}" )
+            if label == 'live':
+                self.video_list = list(filter(lambda x: self.is_live(x), self.video_list))
+            else:
+                self.video_list = list(filter(lambda x: not self.is_live(x), self.video_list))
+
+        # train_subjects = ['2', '3', '4', '5', '6', '7', '9', '10', '11', '12']
+        # if self.is_train:
+        #     self.video_list = list(filter(
+        #         lambda x: self.get_client_from_video_name(x) in train_subjects,
+        #         self.video_list))
+        # else:
+        #     self.video_list = list(filter(
+        #         lambda x: self.get_client_from_video_name(x) not in train_subjects,
+        #         self.video_list))
+
+        real_count = len(list(filter(lambda x: self.is_live(x), self.video_list)))
+        spoof_count = len(self.video_list) - real_count
+        print(f"({dataset_name}) Total video: {len(self.video_list)}: {real_count} vs. {spoof_count}")
             
         self.dataset_name = dataset_name
         self.root_dir = root_dir
@@ -70,6 +75,10 @@ class FaceDataset(Dataset):
             self.frame_per_video = 1
 
         self.init_frame_list()
+
+    def is_live(self, video_path):
+        return video_path.name.startswith('G')
+
     def __len__(self):
         return len(self.video_list)
     
@@ -87,62 +96,25 @@ class FaceDataset(Dataset):
         """
         self.video_frame_list = {video: [] for video in self.video_list}
         for p in self.video_frame_list:
-            crop_faces_list = list(map(pathlib.Path, glob(str(p/'crop_*.jpg'))))
-            assert len(crop_faces_list) > 2, f'Cannot find the image in path {p}'
+            face_img_list = list(map(pathlib.Path, p.iterdir()))
             # obs: in test mode (not self.is_train) only one frame is needed
             if self.is_train or not USE_CENTER_FRAME_FOR_TESTING:
-                self.video_frame_list[p] = crop_faces_list
+                self.video_frame_list[p] = face_img_list
             else:
                 sz = len(crop_faces_list)
                 self.video_frame_list[p] = [crop_faces_list[sz//2]]
         return True
     
     def get_client_from_video_name(self, video_name):
-        video_name = str(video_name).split('/')[-1]
-        if 'msu' in self.dataset_name.lower() or 'replay' in self.dataset_name.lower():
-            match = re.findall('client(\d\d\d)', video_name)
-            if len(match) > 0:
-                client_id = match[0]
-            else:
-                raise RuntimeError('no client')
-        elif 'oulu' in self.dataset_name.lower():
-            match = re.findall('(\d+)_\d$', video_name)
-            if len(match) > 0:
-                client_id = match[0]
-            else:
-                raise RuntimeError('no client')
-        elif 'casia' in self.dataset_name.lower():
-            match = re.findall('(\d+)_[H|N][R|M]_\d$', video_name)
-            if len(match) > 0:
-                client_id = match[0]
-            else:
-                print(f"Cannot find client from : {video_name}")
-                raise RuntimeError('no client')
-        else:
-            raise RuntimeError("no dataset found")
+        video_name = str(video_name).rpartition('/')[-1]
+        client_id = video_name.split('_')[-2]
         return client_id
     
     def __getitem__(self, idx):
         idx = idx % len(self.video_list) # Incase testing with many frame per video
         video_name = self.video_list[idx]
-        spoofing_label = int('live' in video_name.name)
-        if self.dataset_name in DEVICE_INFOS:
-            if 'live' in video_name.name:
-                patterns = DEVICE_INFOS[self.dataset_name]['live']
-            elif 'spoof' in video_name.name:
-                patterns = DEVICE_INFOS[self.dataset_name]['spoof']
-            else:
-                raise RuntimeError(f"Cannot find the label infor from the video: {video_name}")
-            device_tag = None
-            for pattern in patterns:
-                if len(re.findall(pattern, str(video_name))) > 0:
-                    if device_tag is not None:
-                        raise RuntimeError("Multiple Match")
-                    device_tag = pattern
-            if device_tag is None:
-                raise RuntimeError("No Match")
-        else:
-            device_tag = 'live' if spoofing_label else 'spoof'
+        spoofing_label = int(self.is_live(video_name))
+        device_tag = 'live' if spoofing_label else 'spoof'
 
         client_id = self.get_client_from_video_name(video_name)
 
@@ -152,13 +124,10 @@ class FaceDataset(Dataset):
             image_x, _, _, = self.sample_image(image_dir, is_train=True)
             transformed_image1 = self.transform(image_x)           
             transformed_image2 = self.transform(image_x, )
-
-
         else:
-            image_x, _, _ = self.sample_image(image_dir, is_train=False, rep=None)
+            image_x, _, _ = self.sample_image(image_dir, is_train=False,
+                                              rep=None)
             transformed_image1 = transformed_image2 = self.transform(image_x)
-
-
 
         sample = {"image_x_v1": transformed_image1,
                   "image_x_v2": transformed_image2,
@@ -174,13 +143,9 @@ class FaceDataset(Dataset):
     def sample_image(self, image_dir, is_train=False, rep=None):
         """
         rep is the parameter from the __getitem__ function to reduce randomness of test phase
-        
         """
         image_path = str(np.random.choice(self.video_frame_list[image_dir]))
         image_id = int(image_path.split('/')[-1].split('_')[-1].split('.')[0])
-
-        info_name = f"infov1_{image_id:04d}.npy"
-        info_path = image_dir / info_name
 
         try: 
             info = None
@@ -189,7 +154,7 @@ class FaceDataset(Dataset):
             if is_train: 
                 return self.sample_image(image_dir, is_train)
             else:
-                raise ValueError(f"Error in the file {info_path}")
+                raise ValueError(f"Error in the file {image_path}")
         return image, info, image_id * 5
 
 class Identity(): # used for skipping transforms

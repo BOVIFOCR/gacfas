@@ -82,7 +82,7 @@ def setup_device(n_gpu_use):
         print("Warning: The number of GPU\'s configured to use is {}, but only {} are available on this machine.".format(
             n_gpu_use, n_gpu))
         n_gpu_use = n_gpu
-    device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
+    device = torch.device('cuda' if n_gpu_use > 0 else 'cpu')
     list_ids = list(range(n_gpu_use))
     return device, list_ids
 

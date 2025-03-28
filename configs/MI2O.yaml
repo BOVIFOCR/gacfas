@@ -1,14 +1,13 @@
-protocol: "OCM2I"
-train_set: ["OULU", "CASIA_MFSD", "MSU_MFSD"]
-test_set: ["Replay_attack"]
+protocol: "MI2O"
+train_set: ["Replay_attack", "MSU_MFSD"]
+test_set: ["OULU"]
 
 running_name: ""
 
 seed: 85593
 
 PRETRAINED:
-    skip_training: True
-    weights_path: "./paper_weights/resnet18_pOCM2I_best.pth"
+    skip_training: False
 
 PATH:
     data_folder: "./datasets/"
@@ -37,20 +36,21 @@ TRAIN:
     optimizer: "SGD"
     scheduler: "step"
     warming_epochs: 1
-    epochs: 50
+    epochs: 150
+    loss_func: "bce"
     logit_scale: 12
     rotate: True
     color_jitter: False
     cutout: True
-    loss_func: "bce"
     feat_loss: "supcon"
-    lambda_constrast: 0.1
+    lambda_constrast: 0.2
 
-    minimizer: "gac"  # "gac-fas"
+    minimizer: "gac" # gac-fas
     minimizer_warming: 10
 
     GAC:
         rho: 0.1
+        eta: 0.0
         alpha: 0.0002
 TEST:
-    eval_preq: 1
+    eval_preq: 5
